@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eco-Route Network Simulation</title>
+<link rel="stylesheet" href="index.css">
+  <script src="index.js"></script>
+
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Eco-Route Network Simulation</h1>
+      <p>Build a small network by hand, then find the fastest path under a carbon budget. Link color shows how congested each connection is.</p>
+    </header>
+
+    <div class="grid">
+      <div class="controls">
+        <div class="panel">
+          <h2>Add a link</h2>
+          <div class="field-row">
+            <input id="fromInput" placeholder="From node">
+            <input id="toInput" placeholder="To node">
+          </div>
+          <div class="field-row">
+            <input id="distInput" placeholder="Distance (m)" type="number">
+            <input id="utilInput" placeholder="Congestion 0–1" type="number" step="0.1">
+          </div>
+          <p class="field-hint">Congestion is optional (defaults to 0.5). 0 is an idle link, 1 is fully congested — a busy link draws more power and emits more carbon, even if it's short.</p>
+          <button onclick="addEdge()">Add link</button>
+
+          <div class="edge-list" id="edgeList"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Find best route</h2>
+          <div class="field-row">
+            <input id="sourceInput" placeholder="Source node">
+            <input id="destInput" placeholder="Destination node">
+          </div>
+          <button onclick="runRCSPP()">Find path</button>
+
+          <div class="scenarios" id="scenarios"></div>
+          <div class="results" id="output"></div>
+        </div>
+      </div>
+
+      <div class="panel graph-panel">
+        <h2>Network diagram</h2>
+        <svg id="graphSvg" viewBox="0 0 600 420"></svg>
+        <div class="legend">
+          <span><i style="background:#38bdf8"></i> idle link</span>
+          <span><i style="background:#f5a524"></i> congested link</span>
+          <span><i style="background:#34d399"></i> selected route</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
