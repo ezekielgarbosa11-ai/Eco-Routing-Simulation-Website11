@@ -17,7 +17,7 @@ function calculateCarbon(power, deltaT, cef) {
 }
 
 const basePower = 52;           // watts, Cisco Catalyst 1300 baseline (per datasheet)
-const dynamicPower = 5;       // watts, extra draw when a link is fully congested
+const dynamicPower = 200;       // watts, extra draw when a link is fully congested
 const cef = 0.672;              // kg CO2 per kWh, Philippines grid average
 const packetSize = 1500 * 8;
 const bandwidth = 3.5 * 10 ** 6; // DepEd Order No. 46, s. 2011
