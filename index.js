@@ -1,14 +1,15 @@
-// FORMULA FOR EDGE DELAY - FORMULA 3
-function calculateDelay(distance, v, hardwareDelay) {
-  return distance / v + hardwareDelay;
+// FORMULA FOR EDGE DELAY - FORMULA 3 (congestion-aware, queueing-style delay)
+function calculateDelay(distance, v, utilization) {
+  const cappedUtil = Math.min(utilization, 0.95); // cap prevents divide-by-zero at full congestion
+  return distance / v + deltaT / (1 - cappedUtil);
 }
 
 // POWER MODEL - baseline + congestion-dependent + small distance adjustment
-function calculatePower(basePower, dynamicPower, utilization, distance,) {
-  return basePower + dynamicPower * utilization + distance;
+function calculatePower(basePower, dynamicPower, utilization, distance, distanceFactor) {
+  return basePower + dynamicPower * utilization + distance * distanceFactor;
 }
 
-// FORMULA FOR CARBON COST - FORMULA 4 (unit-corrected: joules -> kWh)
+// FORMULA FOR CARBON COST - FORMULA 4 (unit-corrected: joules -> kWh -> grams)
 function calculateCarbon(power, deltaT, cef) {
   const energyJoules = power * deltaT;
   const energyKWh = energyJoules / 3600000;
@@ -17,22 +18,20 @@ function calculateCarbon(power, deltaT, cef) {
 }
 
 const basePower = 52;           // watts, Cisco Catalyst 1300 baseline (per datasheet)
-const dynamicPower = 200;       // watts, extra draw when a link is fully congested
+const dynamicPower = 5;         // watts, extra draw when a link is fully congested
+const distanceFactor = 0.00001; // watts per meter, small realism adjustment
 const cef = 0.672;              // kg CO2 per kWh, Philippines grid average
 const packetSize = 1500 * 8;
 const bandwidth = 3.5 * 10 ** 6; // DepEd Order No. 46, s. 2011
 const deltaT = packetSize / bandwidth;
-const distanceFactor = 0.00001; // watts per meter, small realism adjustment
 const v = 2.0 * 10 ** 8;
-const hardwareDelay = 0.0005;
 
 const CARBON_RATIOS = [0.9, 0.7, 0.5]; // fixed budget levels to test
 
 let rawEdges = [];
-let scenarioResults = []; // filled in after runRCSPP
+let scenarioResults = [];
 let activeScenarioIndex = 0;
 
-// ---------- EDGE INPUT ----------
 function addEdge() {
   const from = document.getElementById("fromInput").value.trim();
   const to = document.getElementById("toInput").value.trim();
@@ -56,7 +55,6 @@ function addEdge() {
 }
 
 function congestionColor(utilization) {
-  // interpolate blue (idle) -> amber (congested)
   const idle = [56, 189, 248];
   const busy = [245, 165, 36];
   const t = Math.max(0, Math.min(1, utilization));
@@ -77,7 +75,6 @@ function renderEdgeList() {
     .join("");
 }
 
-// ---------- GRAPH ALGORITHM ----------
 function buildAdjacencyList(edges) {
   const graph = {};
   for (const edge of edges) {
@@ -114,7 +111,6 @@ function nodesToEdgePath(nodePath, graph) {
   return edgePath;
 }
 
-// ---------- FORMULA 2: RCSPP ----------
 function findBestPath(candidatePaths, carbonBudget) {
   let bestPath = null, bestDelay = Infinity, bestCarbon = null;
   for (const path of candidatePaths) {
@@ -131,7 +127,6 @@ function findBestPath(candidatePaths, carbonBudget) {
   return { feasible: true, bestPath, bestDelay, bestCarbon };
 }
 
-// ---------- RUN + SCENARIOS ----------
 function runRCSPP() {
   const source = document.getElementById("sourceInput").value.trim();
   const destination = document.getElementById("destInput").value.trim();
@@ -145,8 +140,8 @@ function runRCSPP() {
   }
 
   const edgeData = rawEdges.map((edge) => {
-    const d_ij = calculateDelay(edge.distance, v, hardwareDelay);
-    const p_ij = calculatePower(basePower, dynamicPower, edge.utilization, edge.distance,);
+    const d_ij = calculateDelay(edge.distance, v, edge.utilization);
+    const p_ij = calculatePower(basePower, dynamicPower, edge.utilization, edge.distance, distanceFactor);
     const c_ij = calculateCarbon(p_ij, deltaT, cef);
     return { ...edge, edgeDelay: d_ij, carbonCost: c_ij };
   });
@@ -218,7 +213,6 @@ function renderScenarioResult(result, ratio, budget) {
   `;
 }
 
-// ---------- GRAPH VISUALIZATION ----------
 function drawGraph(highlightPath) {
   const svg = document.getElementById("graphSvg");
   svg.innerHTML = "";
@@ -240,7 +234,6 @@ function drawGraph(highlightPath) {
 
   const svgns = "http://www.w3.org/2000/svg";
 
-  // arrow marker defs
   const defs = document.createElementNS(svgns, "defs");
   defs.innerHTML = `
     <marker id="arrowIdle" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -248,14 +241,12 @@ function drawGraph(highlightPath) {
     </marker>`;
   svg.appendChild(defs);
 
-  // edges
   rawEdges.forEach((edge) => {
     const p1 = positions[edge.from], p2 = positions[edge.to];
     const key = `${edge.from}->${edge.to}`;
     const isSelected = highlightSet.has(key);
     const color = isSelected ? "#34d399" : congestionColor(edge.utilization);
 
-    // shorten line so it doesn't go under the node circle
     const dx = p2.x - p1.x, dy = p2.y - p1.y;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
     const nodeR = 26;
@@ -275,7 +266,6 @@ function drawGraph(highlightPath) {
     line.style.stroke = color;
     svg.appendChild(line);
 
-    // fix marker color by rendering a per-edge marker (SVG markers don't inherit stroke color reliably)
     const midX = (x1 + x2) / 2, midY = (y1 + y2) / 2;
     const label = document.createElementNS(svgns, "text");
     label.setAttribute("x", midX);
@@ -288,7 +278,6 @@ function drawGraph(highlightPath) {
     svg.appendChild(label);
   });
 
-  // nodes
   nodeNames.forEach((name) => {
     const p = positions[name];
     const circle = document.createElementNS(svgns, "circle");
@@ -313,6 +302,5 @@ function drawGraph(highlightPath) {
   });
 }
 
-// initial empty state
 renderEdgeList();
 drawGraph();
